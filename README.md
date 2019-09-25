@@ -43,7 +43,7 @@ docker build .
 * we will have a service called app, and the build section of the configuration,
   we are going to have a context to ".", which is our current directory.
 * port 8000 on our host to 8000 on our image
-* volume allow us to get the update we make to our project in to our docker image
+* volumes allow us to get the update we make to our project in to our docker image
   in real time
 * command: > will add line in next line, make sure to start it one space after indentation
 * sh -c : sh is shell command and c is command
