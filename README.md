@@ -58,3 +58,13 @@ docker-compose run app sh -c "django-admin.py startproject app ."
 runs django-admin management command that comes when we install django, then it runs
 the start project command and installs a new project called app and start it in
 our current location.
+
+# 25, Sep, 19
+
+## Notes on Travis:
+* Add .travis.yml file in the project
+* Pipeline for bitbucket and jenkins are other option for CI (Continous Intergration)
+  [here]{guru99.com/jenkins-vs-travis.html} a link for comparing jenkins vs Travis
+
+## Notes on flake8:
+* For configuring flake8, we add a file inside django app folder with name .flake8
