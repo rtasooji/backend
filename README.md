@@ -148,3 +148,112 @@ python manage.py makemigrations "name of the app"
     *   There is a separate field set for add
     *   This also needs to get overwritten to work with user without username
         *   add_fieldset needs to be changed
+
+## Notes on setting up databse:
+*   set up docker-compose.yml
+    *   add db to service
+    *   db has image of postgres from docker container
+    *   we add the environment variable for db
+    *   in app service we set up environment for app 
+    *   We need to connect the dependency for our app service 
+        *   when making docker-compose, we can create different services
+            that depends on other services
+        *   these dependencies will start before the app
+        *   the services will be available through network with this service
+        *   to do so:
+            *   depends_on
+*   set up docker file and requirement.txt
+    *   Django recommend to use "psycopg2" as a package to connect with 
+        postgresql
+    *   We add the package to the requirement.txt
+    *   The package requires some dependencies to work
+    *   We add the dependeincies to install inside Dcokerfile before running
+        pip command
+```bash
+## update: update registery before adding
+## no-cache: Dont store registry index on dockerfile to make sure 
+## the docker file is small and minimize security issues
+
+RUN apk add --update --no-cache postgresql-client 
+
+## --virtual: allows us to use these dependencies to install psycopg2 on docker
+##  and remove them later on to minimize the size of the docker
+
+RUN apk add --update --no-cache --virtual .tmp-build-dep \
+    gcc libc-dev linux-headers postgresql-dev
+.
+.
+.
+
+# After running pip install -r requirement.txt, we are removing the dependencies
+RUN apk del .tmp-build-dep 
+
+
+```
+*   Set up django to work with postgresql:
+    *   in setting.py in DATABASE section:
+        *   Change ENGINE to postgresql
+        *   By using environment vairalbe we can easily call the database
+            inside our project by using os.environ.get("Name of the env")
+        *   We defined the name of env in our docker-compose
+        
+## Docker vs Docker-Compose:
+*   Compose is a tool for defining and running multi-container Docker applications
+*   We define the services inside YAML file and create and start all services.
+*   Dockerfile is used to be able reproduce the app anywhere
+    *   In our project the app service uses an image that's built from 
+        the Dockerfile in the current directory
+    *   the db service uses the public image postgresql 
+
+## Mocking
+*   Mocking is an advance area in testing  to override or change the behavior of 
+    dependencies
+* Why mocking:
+    *   We don't want our test depends on external services
+*   with mocking we:
+    *   Isolate the specific piece of code
+    *   Avoid un intended side effects
+*   For example if we want to test email functionality we don't want to send 
+    email every time. we use mocking to override the dependencies that sends 
+    email and replace it with mocking object.
+
+## writing test class for command:
+*   python unittest.mock import patch provides mocking functionalities
+*   django.core.management import call_command gives access to command inside 
+    source code
+*   django.db.utils import OperationalError simulate the raise error accessing 
+    database
+*   using patch in test function:
+```python
+with patch('django.db.utils.ConnectionHandler.__getitem__') as gi:
+    gi.return_value = True
+    self.assertEqual(gi.call_count, 1)
+```
+ *  Patch will do two things:
+    *   Change the behavior of function
+    *   Check how many times it being called or different calls were made to it
+*   We can use patch as decorator for test method.
+    *   if in our method we need to wait 5 seconds we can disable the time 
+    *   It needs to be passed to method as parameter
+```python
+@patch('time.sleep', return_value=True)
+def test_db_wait(self, ts):
+    with patch('django.db.utils.ConnectionHandler.__getitem__') as gi:
+        gi.side_effect = [OperationError] * 5 + [True]
+        self.assertEqual(gi.call_count, 6)
+```
+*   Patch side_effect we can pass a list of Errors or value to returned through 
+    iteration.
+## Adding command to django:
+*   To add custom command:
+    *    create package management inside app
+    *   create package commands inside management
+    *   create module with the name of the command inside commands
+    *   We need to inherent BaseCommand class from django.core.management.base
+    *   We raise OperationError if database is not available from
+        django.db.utils 
+    *   To connect to the database we import connections from django.db
+    *   the abstract function handle needs to be implemented from BaseCommand
+    *   The BaseCommand has stdout.write function to output on terminal
+    *   self.style.SUCCESS("Nice") can be used to output in green
+    *   connections["default"] to connect to default database setup in setting.py
