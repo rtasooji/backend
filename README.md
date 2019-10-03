@@ -1,4 +1,4 @@
-# 23, Sep, 2019
+# Backend with django advance
 * Setting up project repository for udemy backend course
 
 ## notes:
@@ -59,7 +59,6 @@ runs django-admin management command that comes when we install django, then it 
 the start project command and installs a new project called app and start it in
 our current location.
 
-# 25, Sep, 19
 
 ## Notes on Travis:
 * Add .travis.yml file in the project
@@ -79,8 +78,6 @@ our current location.
 ```bash
 docker-compose run app sh -c "python manage.py test"
 ```
-
-# 28, Sep, 19
 
 ## Notes on Core APP:
 
@@ -367,7 +364,7 @@ self.assertFalse(user_exist)
         from view it calls the serializer class, serialize the json format,
         and pass the validated data to create_user model.
         
-## Adding create token API:
+## Adding test for create token API:
 *   This is an end point to make HTTP post request and generate a temporary 
     authentication token that can be used to authenticate future requests
     with the API, so we don't need to send username and password with every 
@@ -385,6 +382,42 @@ self.assertFalse(user_exist)
     # check if key not available inside the respone
     self.assertNotIn('token', res.data)
     ```
+## Adding Create Token API:
+*   in serializer:
+    *   Make AuthTokenSerialzier class inhereted from serialize.Serializer
+    *   import authentication function from contrib.auth
+    *   import ugettext_lazy as _ from utils.transloation
+        *   This is being used for converting language if in needed
+        *   the different between this and get_text is not explained
+    *   when calling validation function we check the credentials are correct
+    *   if they are correct we return them, when calling the validate 
+        function we need to return attr parameter at the end
+    ```python
+    class AuthToken(serializer.Serializer):
+        email = serializers.CharField()
+    
+        # by default django trim whitespace 
+        # we want to include white space in password at start and end
+        password = serializers.CharField(style={'input_type': 'password'},
+                                         trim_whitespace = False)
+        def validate(self, attrs):
+            email = attrs.get('email')
+            passwrod = attrs.get('password')
+    
+            #   Get access to the context of the request that was made
+            #   What djngo does when request is made it pass it to the 
+            #   serializer in the context class variable
+            user = athenticate(request=self.context.get( 'request' ),
+                                username=email,
+                                password=password)
+            if not_user:
+                msg=_('Unable to authenticate with provided credintial')
+                raise serializer.ValidationError( msg, code='authenticateon')
+            user['user'] = user
+            return attr
+    
+    ```    
+    
 ## Adding test to manage user endpoint:
 *   This endpoint allows the authenticated user to update their own profile,
     including changing name, password and viewing their user object.
@@ -419,6 +452,7 @@ self.assertFalse(user_exist)
         *   update user with self.user.refresh_from_db()
         *   assertEqual(self.user.name, payload['name'])
         *   assertTrue(self.user.check_password(payload['password]))
+        
 ## Adding Manage User Endpoint:
 *   in serializer.py
     *   in class UserSerializer we override update function
