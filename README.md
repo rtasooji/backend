@@ -257,3 +257,213 @@ def test_db_wait(self, ts):
     *   The BaseCommand has stdout.write function to output on terminal
     *   self.style.SUCCESS("Nice") can be used to output in green
     *   connections["default"] to connect to default database setup in setting.py
+    *   in docker-compose.yml add the command and migrate before running server.
+
+##  Django in browser:
+*   NOTE:
+    *   Because we run django in docker make sure we are not using local host for 
+        django app in docker use another ip address for the server
+    *   We need to make super user for the admin inside terminal
+```bash
+docker-compose run app sh -c "python manage.py createsuperuser"
+```
+
+## User Management End point:
+
+*   Adding --rm after run command in docker-compose will removes the container 
+    after the command
+*   We remove migrations, admin, models, and test files from new created app
+    , the core app will handle this except fot test, we add test cases inside
+    the tests foldres
+*   in setting.py we add the newly created app, and adding `rest_framework,
+    and 'rest_framework.authtoken'
+*   the authentication token will be used to authenticate request to other API 
+    in our project.
+    
+##  Adding test cases for user management:
+*   for our test case we need to import some classes and functions:
+    *   TestCase from django.test
+    *   get_user_model function from django.contrib.auth
+    *   reverse from django.urls
+    *   APIClient from rest_framework.test, support for making API requests
+        the class supports the same request interface as Django's standard
+        Client class
+    *   status from test_framework provides human readable http request
+*   We added three test cases:
+    *   user_create_successful
+    *   no duplicate user 
+    *   weak password with less than 5 chars
+*   Also we added helper function and const variable for testing.
+*   Made payload and send payload as post command with the url
+*   check the result respond's status.
+    *   the respond for create HTTP_201
+*   after creating we user our model to get the user and check the password
+*   the res.data shouldn't have any password info in it
+```python
+res = self.client.post(URL, payload)
+self.assertNotIn('password', res.data)
+``` 
+*   For duplicate test case we check the post response status is 400
+*   For short password after checking for 400 response, we need to check
+    no user is created in our database
+```python
+user_exist = get_user_model().objects.filter(email=payload['email']).exists()
+self.assertFalse(user_exist)
+```
+## Add Create User API:
+*   There are three steps required to create the api
+    *   create a serializer for creating user request
+    *   creating a view to handle the request
+    *   Wire up the view to a URL, which allows us to access the API
+*   Serializing in django:
+    *   creating a serializers.py file inside the app
+    *   include serializer from rest_framework
+        * Inherent ModelSerializer from serializer
+    *   Adding class Meta
+        *   defining the model we are using in model variable
+        *   defining the fields that we want to convert to and from json
+            when we make our HTTP post request, then we retrieve it to 
+            our view and save it to our model. In another word, fields
+            we want accessable in our API either read or write
+        *   extra_kwargs, allows us to configure extra settings in our model
+            serializer and we are going to make sure the password is write_only
+            and min_length is 5 chars.
+    *   defining create function to pass the validated data after serializing
+        into our model create_user function
+*   Adding view for managing our create user API:
+    *   update view.py file in our app folder
+    *   import our UserSerializer we just created
+    *   import generics from rest_framework, this provides a generic
+        class for Creating View for API
+    *   inherent generics.CreateAPIView, and just point 
+        serializer_class variable to our UserSerializer
+*   Adding URL and wiring URL to our view:
+    *   in app folder create urls.py
+    *   import our view.py from app folder
+    *   import path from django.urls, this will helps us to define 
+        different path in our model which can be used by reverse function
+    *   Define app name inside app_name variable this will be used in reverse
+        as first parameter
+    *   define urlpatterns list variable
+        *   the element inside list is path, which will be pointed to our view
+    ```python
+    urlpatterns = [
+        path('create/', views.CreateUserView.as_view(), name='create'),
+    ]
+    ```
+    *   import include from django.urls 
+    *   in urls.py in main app folder, we will include the new created urls.py
+    ```python
+    urlpatterns = [
+    .
+    .
+    .
+    path('api/user/', include('user.urls')),
+    ]
+    ```
+    *   Any request starts with api/user will go to user.urls and from
+        there it checks the next part.
+        For create it checks create, then it calls the view
+        from view it calls the serializer class, serialize the json format,
+        and pass the validated data to create_user model.
+        
+## Adding create token API:
+*   This is an end point to make HTTP post request and generate a temporary 
+    authentication token that can be used to authenticate future requests
+    with the API, so we don't need to send username and password with every 
+    request.
+*   We provide the generated token as authentication header for future request.
+*   We can store the token in cookie or persistent storage that we can use
+    to authenticate in future.
+*   We can revoke (put an end) the token in database at any time in future 
+*   Four unit test provided:
+    *   check successful generated token
+    *   check invalid credentials
+    *   check not generated user
+    *   check empty password for generated user
+    ```python
+    # check if key not available inside the respone
+    self.assertNotIn('token', res.data)
+    ```
+## Adding test to manage user endpoint:
+*   This endpoint allows the authenticated user to update their own profile,
+    including changing name, password and viewing their user object.
+*   new const url ME_URL with {user:me} added
+*   4 test cases added to test_user_api:
+    *   Test the authentication is required to be able to change
+        *   this test implemented in public, because authenticated user is 
+            not required
+    *   Retrieving authenticate user is successful 
+        *   a new class with new setup created.
+        *   the setup has:
+            *   user, client, force_auth user to client 
+        *   check self.client.get(ME_URL)
+        *   return status should be 200
+        *   data has name and email only, no password should be included
+    *   http post is not allowed:
+        *   Post is for creating, push and patch is for editing
+            *   Push vs Patch:
+                *   PUT method only allows a complete replacement of a document
+                *   PATCH request is used to make changes to part of the 
+                    resource at a location, that is it patches the resources,
+                    changing its properties. It is used to make minor updates
+                    to resources
+                *   If resource is not available, the patch fails without
+                    creating a new resource, unlike PUT which would
+                    create a new one using the payload
+        *   send Post request
+        *   the response from the post should be 405 (method not allowed)
+    *   test user profile is updated
+        *   make new payload
+        *   patch the new payload
+        *   update user with self.user.refresh_from_db()
+        *   assertEqual(self.user.name, payload['name'])
+        *   assertTrue(self.user.check_password(payload['password]))
+## Adding Manage User Endpoint:
+*   in serializer.py
+    *   in class UserSerializer we override update function
+    *   The purpose for this is to make sure the password is set using the 
+        set_password function instead of just setting it to whichever value 
+        is provided
+    *   The instance parameter of update function is the model instance that 
+        is linked to our model serializer will be user object.
+        Validated_data parameter are data in Meta class and ready for validation
+    ```python
+    password = validation_data.pop('password', None)
+    # call the update from super class which is ModelSerializer 
+    user = super().update(instance, validated_data)
+    if password:
+        user.set_passwrod(password)
+        user.save()
+    return user
+    ```
+*   in user/view.py:
+    *   import authentication and permission from rest_framework
+    *   Add ManageUserView class inhereted from generic.RetrieveUpdateAPIView
+    *   define serializer_classes
+    *   define authentication_classes this needs to be iterable like list or tuple
+    *   define permission_classes
+    *   We need to overwrite get_object function, in our case we only want to 
+        retrieve model for the logged in user, so we return the authenticated user
+    ```python
+    class ManageUserView(generic.RetreiveUpdateAPIVIEW):
+        serialization_classes = UserSerializer
+    
+        # this will define the mechanism authentication will happen
+        authentication_classes = (authentication.TokenAuthentication, )
+    
+        # Permission is the level of access that the user has 
+        #   The user is authenticated to use api they don't have to have any
+        #   specific permission just logged in
+        permission_classes = (permission.IsAuthenticated, )
+        
+        def get_object(self):
+    
+            # When the object is called the request will have the user, attached
+            # to it because of authentication_classes, thiw will authenticate
+            # user and attach it to the request.
+    
+            return self.request.user
+    
+    ```
+            
